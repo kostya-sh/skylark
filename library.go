@@ -1043,23 +1043,33 @@ func zip(thread *Thread, _ *Builtin, args Tuple, kwargs []Tuple) (Value, error) 
 		}
 		iters[i] = it
 		n := Len(seq)
-		if n < 0 {
-			// TODO(adonovan): support iterables of unknown length.
-			return nil, fmt.Errorf("zip: argument #%d has unknown length", i+1)
-		}
 		if i == 0 || n < rows {
 			rows = n
 		}
 	}
-	result := make([]Value, rows)
-	array := make(Tuple, cols*rows) // allocate a single backing array
-	for i := 0; i < rows; i++ {
-		tuple := array[:cols:cols]
-		array = array[cols:]
-		for j, iter := range iters {
-			iter.Next(&tuple[j])
+	var result []Value
+	if rows >= 0 {
+		result = make([]Value, rows)
+		array := make(Tuple, cols*rows) // allocate a single backing array
+		for i := 0; i < rows; i++ {
+			tuple := array[:cols:cols]
+			array = array[cols:]
+			for j, iter := range iters {
+				iter.Next(&tuple[j])
+			}
+			result[i] = tuple
 		}
-		result[i] = tuple
+	} else {
+	CollectTuples:
+		for {
+			tuple := make(Tuple, cols)
+			for i, iter := range iters {
+				if !iter.Next(&tuple[i]) {
+					break CollectTuples
+				}
+			}
+			result = append(result, tuple)
+		}
 	}
 	return NewList(result), nil
 }
